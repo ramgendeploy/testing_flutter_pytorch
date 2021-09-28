@@ -15,6 +15,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Map;
 import org.pytorch.IValue;
 import org.pytorch.Module;
 import org.pytorch.Tensor;
@@ -60,9 +61,10 @@ public class MainActivity extends FlutterActivity {
                 TensorImageUtils.TORCHVISION_NORM_STD_RGB
               );
 
-              Tensor oTensor = module
+              final Tensor oTensor = module
                 .forward(IValue.from(inputTensor))
                 .toTensor();
+
               float[] scores = oTensor.getDataAsFloatArray();
 
               float maxScore = -Float.MAX_VALUE;
@@ -75,6 +77,47 @@ public class MainActivity extends FlutterActivity {
               }
               String className = Constants.IMAGENET_CLASSES[maxScoreIdx];
               result.success(className);
+
+              break;
+            case "segment_image":
+              // bitmap = Bitmap.createScaledBitmap(bitmap, width, height, false);
+              Bitmap segbitmap = null;
+              Module segmodule = null;
+              try {
+                String absPath = call.argument("model_path");
+                int boffset = call.argument("data_offset");
+                int blenght = call.argument("data_length");
+                // bitmap = BitmapFactory.decodeStream(getAssets().open("image.jpg"));
+                byte[] byteStream = call.argument("image_data");
+                segbitmap =
+                  BitmapFactory.decodeByteArray(byteStream, boffset, blenght);
+
+                Log.i("Pytorch: Main activity", absPath);
+
+                segmodule = Module.load(absPath);
+              } catch (Exception e) {
+                Log.e("Pytorch: Main activity", "Error reading", e);
+                finish();
+              }
+              Tensor seginputTensor = TensorImageUtils.bitmapToFloat32Tensor(
+                segbitmap,
+                TensorImageUtils.TORCHVISION_NORM_MEAN_RGB,
+                TensorImageUtils.TORCHVISION_NORM_STD_RGB
+              );
+
+              IValue segoTensor = segmodule.forward(
+                IValue.from(seginputTensor)
+              );
+              Map<String, IValue> dict = segoTensor.toDictStringKey();
+              // Log.i("Pytorch", dict);
+              for (String keys : dict.keySet()) {
+                Log.i("MainActivity:Pytorch:", keys);
+              }
+              Tensor segOTensor = dict.get("out").toTensor();
+
+              float[] output = segOTensor.getDataAsFloatArray();
+              // Log.i("MainActivity:Pytorch:", String.format("%d", segOTensor.shape));
+              result.success(dout);
               break;
             default:
               result.notImplemented();

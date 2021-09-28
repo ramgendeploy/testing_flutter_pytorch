@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart';
@@ -50,14 +51,22 @@ class _MyHomePageState extends State<MyHomePage> {
       documentsPath = directory.path;
     });
 
-    final String dbPath = join(directory.path, 'model.pt');
+    final String resnet50 = join(directory.path, 'model.pt');
     final ByteData data = await rootBundle.load('assets/models/model.pt');
+
+    final String segmodel = join(directory.path, 'seg_opt.pt');
+    final ByteData segdata = await rootBundle.load('assets/models/seg_opt.pt');
 
     final List<int> bytes =
         data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    final List<int> segbytes = segdata.buffer
+        .asUint8List(segdata.offsetInBytes, segdata.lengthInBytes);
 
-    if (!File(dbPath).existsSync()) {
-      await File(dbPath).writeAsBytes(bytes);
+    if (!File(resnet50).existsSync()) {
+      await File(resnet50).writeAsBytes(bytes);
+    }
+    if (!File(segmodel).existsSync()) {
+      await File(segmodel).writeAsBytes(segbytes);
     }
   }
 
@@ -82,6 +91,29 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  Future<void> _getSegmentation() async {
+    final ByteData imageData = await rootBundle.load('assets/animal.jpg');
+    try {
+      final Float64List result = await pytorchChannel.invokeMethod(
+        'segment_image',
+        <String, dynamic>{
+          'model_path': '$documentsPath/seg_opt.pt',
+          'image_data': imageData.buffer
+              .asUint8List(imageData.offsetInBytes, imageData.lengthInBytes),
+          'data_offset': imageData.offsetInBytes,
+          'data_length': imageData.lengthInBytes
+        },
+      );
+      print(result);
+
+      // setState(() {
+      //   prediction = result;
+      // });
+    } on PlatformException catch (e) {
+      print(e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -92,21 +124,42 @@ class _MyHomePageState extends State<MyHomePage> {
         child: Column(
           children: <Widget>[
             Text(documentsPath ?? ''),
-            Center(
-                child: SizedBox(
-                    width: 300, child: Image.asset('assets/animal.jpg'))),
-            Text(
-              (prediction ?? '').toUpperCase(),
-              style: TextStyle(fontSize: 35),
+            Stack(
+              children: <Widget>[
+                Align(
+                    alignment: Alignment.center,
+                    child: SizedBox(
+                        width: 300, child: Image.asset('assets/animal.jpg'))),
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Text(
+                    (prediction ?? '').toUpperCase(),
+                    style: const TextStyle(fontSize: 25),
+                  ),
+                ),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: <Widget>[
+                RaisedButton(
+                  child: const Text('Segment Image'),
+                  onPressed: _getSegmentation,
+                ),
+                RaisedButton(
+                  child: const Text('Classify Image'),
+                  onPressed: _getPrediction,
+                )
+              ],
             )
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _getPrediction,
-        tooltip: 'Predict Image',
-        child: const Icon(Icons.add),
-      ),
+      // floatingActionButton: FloatingActionButton(
+      //   onPressed: _getPrediction,
+      //   tooltip: 'Predict Image',
+      //   child: const Icon(Icons.add),
+      // ),
     );
   }
 }
