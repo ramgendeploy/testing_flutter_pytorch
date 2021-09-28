@@ -1,4 +1,7 @@
 # Miscellaneous
+seg_opt.pt
+segmodel.pt
+
 *.class
 *.log
 *.pyc
